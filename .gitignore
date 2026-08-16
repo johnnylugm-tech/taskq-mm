@@ -3,9 +3,12 @@ __pycache__/
 .pytest_cache/
 .coverage
 *.db
-.mutmut-cache/
+.mutmut_cache/
+.mutmut_temp/
+.mutmut_workspace/
 .mutants/
-.env
+.mutmut/
+.import_linter_cache/
 .venv/
 venv/
 .mypy_cache/

@@ -25,7 +25,7 @@ def _capture_output(formatter_json: bool) -> tuple[logging.Logger, io.StringIO]:
     stream = io.StringIO()
     handler = logging.StreamHandler(stream=stream)
     handler.setFormatter(logging_setup._RedactingFormatter(json_format=formatter_json))
-    logger = logging.getLogger("taskq_api.test")
+    logger = logging.getLogger(f"taskq_api.test_{id(stream)}")
     logger.handlers = [handler]
     logger.setLevel(logging.INFO)
     logger.propagate = False

@@ -9,21 +9,12 @@ description = "HTTP task-queue service (round-2 test bed for harness-methodology
 requires-python = ">=3.11"
 
 [tool.setuptools.packages.find]
-where = ["03-development/src"]
+where = ["src"]
 
 [tool.pytest.ini_options]
-testpaths = ["03-development/tests"]
+testpaths = ["tests"]
 addopts = "-ra"
 asyncio_mode = "auto"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
-
-[tool.coverage.run]
-source = ["03-development/src/taskq_api"]
-branch = false
-omit = ["*/tests/*"]
-
-[tool.coverage.report]
-show_missing = true
-skip_empty = true

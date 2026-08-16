@@ -114,6 +114,7 @@ async def test_healthz_returns_ok(client: httpx.AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_readyz_returns_ok_when_db_and_migration_present(client: httpx.AsyncClient) -> None:
     response = await client.get("/readyz")
+    print("READYZ response status:", response.status_code, "body:", response.text)
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"

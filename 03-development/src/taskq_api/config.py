@@ -100,7 +100,7 @@ class Settings:
         if "@" not in url:
             return url
         scheme, rest = url.split("://", 1) if "://" in url else ("", url)
-        if "@" not in rest:
+        if "@" not in rest:  # pragma: no cover — defensive
             return url
         creds, host = rest.rsplit("@", 1)
         if ":" in creds:

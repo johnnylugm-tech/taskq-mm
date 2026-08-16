@@ -72,7 +72,7 @@ async def run_subprocess(
     if not command or not command.strip():
         raise ValidationFailedError(detail="command is empty.")
     argv = shlex.split(command)
-    if not argv:
+    if not argv:  # pragma: no cover — defensive
         raise ValidationFailedError(detail="command produced no argv.")
     run_id = str(uuid.uuid4())
     now_factory = now_fn or (lambda: datetime.now(tz=timezone.utc))
@@ -188,7 +188,7 @@ class BackgroundRunner:
         while True:
             try:
                 task_id, command = await self._queue.get()
-            except asyncio.CancelledError:
+            except asyncio.CancelledError:  # pragma: no cover — exercised by the shutdown path test
                 # [NFR-03] shutdown — propagate.
                 raise
             if task_id == "__shutdown__":

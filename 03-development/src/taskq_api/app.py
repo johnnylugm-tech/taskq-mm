@@ -38,7 +38,7 @@ def _make_recorder():
         with transaction() as session:
             tasks_service.record_run_for_task(
                 session,
-                task_id=result.run_id,
+                task_id=result.task_id,
                 run_id=result.run_id,
                 exit_code=result.exit_code,
                 stdout_tail=result.stdout_tail,

@@ -95,9 +95,10 @@ def get_sessionmaker() -> "sessionmaker[Session]":
     return _sessionmaker
 
 
-def set_engine(engine: Engine) -> None:
+def set_engine(engine: "Engine") -> None:
     """Override the engine — used by tests that point at a temp DB."""
     global _engine, _sessionmaker, _url_in_use
+    from sqlalchemy.orm import sessionmaker
     with _lock:
         if _engine is not None and _engine is not engine:
             _engine.dispose()
