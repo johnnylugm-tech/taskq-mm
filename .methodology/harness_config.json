@@ -1,0 +1,14 @@
+{
+  "round": 2,
+  "project": "taskq-api",
+  "spec": "SPEC.md",
+  "features": {
+    "mutation_testing": true
+  },
+  "mutation_testing": {
+    "scope": ["03-development/src/taskq_api/service", "03-development/src/taskq_api/repository"],
+    "rationale": "Limiting to service/ and repository/ keeps mutation-test wall time within the round budget while still exercising all business logic and persistence boundaries; api/ handlers are thin dispatchers and models/ are declarative.",
+    "threshold": 70
+  },
+  "crg_cohesion_healthy": true
+}

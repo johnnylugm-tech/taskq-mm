@@ -1,0 +1,23 @@
+{
+  "include": ["03-development/src", "03-development/tests", "migrations"],
+  "extraPaths": ["03-development/src"],
+  "pythonVersion": "3.11",
+  "strict": [],
+  "reportMissingImports": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportUndefinedVariable": "none",
+  "reportUnusedFunction": "none",
+  "reportUnusedVariable": "none",
+  "reportUnknownVariableType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportUnknownMemberType": "none",
+  "reportUnknownParameterType": "none",
+  "reportUnknownLambdaType": "none",
+  "reportMissingTypeArgument": "none",
+  "reportMissingParameterType": "none",
+  "reportMissingTypeStubs": "none",
+  "reportAttributeAccessIssue": "none",
+  "reportTypedDictNotRequiredAccess": "none",
+  "reportPrivateImportUsage": "none",
+  "reportUnnecessaryTypeIgnoreComment": "none"
+}

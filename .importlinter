@@ -1,0 +1,13 @@
+[importlinter]
+root_package = taskq_api
+root_package_dir = 03-development/src
+include_external_packages = True
+
+[importlinter:contract:layers]
+name = Layers
+type = layers
+layers =
+    taskq_api.api
+    taskq_api.service
+    taskq_api.repository
+    taskq_api.models

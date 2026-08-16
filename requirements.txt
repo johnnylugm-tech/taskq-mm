@@ -1,0 +1,9 @@
+# Runtime dependencies — taskq-api
+# All versions pinned (NFR-07); full transitive tree lives in requirements.lock
+fastapi==0.115.6
+pydantic==2.10.4
+SQLAlchemy==2.0.36
+alembic==1.14.0
+uvicorn[standard]==0.34.0
+httpx==0.28.1
+python-dotenv==1.0.1

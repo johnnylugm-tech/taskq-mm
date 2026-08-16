@@ -1,0 +1,392 @@
+[
+  {
+    "name": "Jinja2",
+    "version": "3.1.5",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "Mako",
+    "version": "1.3.8",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "MarkupSafe",
+    "version": "3.0.2",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "PyYAML",
+    "version": "6.0.2",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "Pygments",
+    "version": "2.19.1",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "SQLAlchemy",
+    "version": "2.0.36",
+    "license": "MIT License",
+    "direct": true
+  },
+  {
+    "name": "aiohappyeyeballs",
+    "version": "2.4.6",
+    "license": "Python Software Foundation License",
+    "direct": false
+  },
+  {
+    "name": "aiohttp",
+    "version": "3.11.10",
+    "license": "Apache Software License",
+    "direct": false
+  },
+  {
+    "name": "aiosignal",
+    "version": "1.3.2",
+    "license": "Apache Software License",
+    "direct": false
+  },
+  {
+    "name": "alembic",
+    "version": "1.14.0",
+    "license": "MIT License",
+    "direct": true
+  },
+  {
+    "name": "annotated-types",
+    "version": "0.7.0",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "anyio",
+    "version": "4.7.0",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "attrs",
+    "version": "25.1.0",
+    "license": "UNKNOWN",
+    "direct": false
+  },
+  {
+    "name": "bandit",
+    "version": "1.9.4",
+    "license": "Apache-2.0",
+    "direct": false
+  },
+  {
+    "name": "certifi",
+    "version": "2024.12.14",
+    "license": "Mozilla Public License 2.0 (MPL 2.0)",
+    "direct": false
+  },
+  {
+    "name": "click",
+    "version": "8.1.8",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "coverage",
+    "version": "7.15.4",
+    "license": "Apache-2.0",
+    "direct": false
+  },
+  {
+    "name": "dnspython",
+    "version": "2.7.0",
+    "license": "ISC License (ISCL)",
+    "direct": false
+  },
+  {
+    "name": "email_validator",
+    "version": "2.2.0",
+    "license": "The Unlicense (Unlicense)",
+    "direct": false
+  },
+  {
+    "name": "fastapi",
+    "version": "0.115.6",
+    "license": "MIT License",
+    "direct": true
+  },
+  {
+    "name": "fastapi-cli",
+    "version": "0.0.7",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "frozenlist",
+    "version": "1.8.0",
+    "license": "Apache-2.0",
+    "direct": false
+  },
+  {
+    "name": "greenlet",
+    "version": "3.1.1",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "grimp",
+    "version": "3.15",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "h11",
+    "version": "0.14.0",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "httpcore",
+    "version": "1.0.7",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "httptools",
+    "version": "0.6.4",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "httpx",
+    "version": "0.28.1",
+    "license": "BSD License",
+    "direct": true
+  },
+  {
+    "name": "idna",
+    "version": "3.10",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "import-linter",
+    "version": "2.3",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "iniconfig",
+    "version": "2.3.0",
+    "license": "UNKNOWN",
+    "direct": false
+  },
+  {
+    "name": "junit-xml",
+    "version": "1.8",
+    "license": "Freely Distributable; MIT License",
+    "direct": false
+  },
+  {
+    "name": "markdown-it-py",
+    "version": "3.0.0",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "mdurl",
+    "version": "0.1.2",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "multidict",
+    "version": "6.1.0",
+    "license": "Apache Software License",
+    "direct": false
+  },
+  {
+    "name": "mutmut",
+    "version": "3.0.0",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "packaging",
+    "version": "26.3",
+    "license": "UNKNOWN",
+    "direct": false
+  },
+  {
+    "name": "parso",
+    "version": "0.8.7",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "pluggy",
+    "version": "1.6.0",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "propcache",
+    "version": "0.5.2",
+    "license": "Apache Software License",
+    "direct": false
+  },
+  {
+    "name": "py-cpuinfo",
+    "version": "9.0.0",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "pydantic",
+    "version": "2.10.4",
+    "license": "MIT License",
+    "direct": true
+  },
+  {
+    "name": "pydantic_core",
+    "version": "2.27.2",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "pytest",
+    "version": "8.3.4",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "pytest-asyncio",
+    "version": "0.25.0",
+    "license": "Apache Software License",
+    "direct": false
+  },
+  {
+    "name": "pytest-benchmark",
+    "version": "5.1.0",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "pytest-cov",
+    "version": "6.0.0",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "python-dotenv",
+    "version": "1.0.1",
+    "license": "BSD License",
+    "direct": true
+  },
+  {
+    "name": "python-multipart",
+    "version": "0.0.20",
+    "license": "Apache Software License",
+    "direct": false
+  },
+  {
+    "name": "rich",
+    "version": "13.9.4",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "rich-toolkit",
+    "version": "0.13.2",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "setproctitle",
+    "version": "1.3.7",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "shellingham",
+    "version": "1.5.4",
+    "license": "ISC License (ISCL)",
+    "direct": false
+  },
+  {
+    "name": "six",
+    "version": "1.17.0",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "sniffio",
+    "version": "1.3.1",
+    "license": "Apache Software License; MIT License",
+    "direct": false
+  },
+  {
+    "name": "starlette",
+    "version": "0.41.3",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "stevedore",
+    "version": "5.9.0",
+    "license": "UNKNOWN",
+    "direct": false
+  },
+  {
+    "name": "typer",
+    "version": "0.15.1",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "typing_extensions",
+    "version": "4.12.2",
+    "license": "Python Software Foundation License",
+    "direct": false
+  },
+  {
+    "name": "ujson",
+    "version": "5.10.0",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "uvicorn",
+    "version": "0.34.0",
+    "license": "BSD License",
+    "direct": true
+  },
+  {
+    "name": "uvloop",
+    "version": "0.21.0",
+    "license": "Apache Software License; MIT License",
+    "direct": false
+  },
+  {
+    "name": "watchfiles",
+    "version": "1.0.3",
+    "license": "MIT License",
+    "direct": false
+  },
+  {
+    "name": "websockets",
+    "version": "14.1",
+    "license": "BSD License",
+    "direct": false
+  },
+  {
+    "name": "yarl",
+    "version": "1.18.0",
+    "license": "Apache Software License",
+    "direct": false
+  }
+]

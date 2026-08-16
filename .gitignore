@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+*.db
+.mutmut-cache/
+.mutants/
+.env
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
