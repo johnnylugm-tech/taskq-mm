@@ -82,4 +82,12 @@ def test_scope_values() -> None:
 
 
 def test_task_status_values() -> None:
-    assert {s.value for s in TaskStatus} == {"pending", "running", "done", "failed", "timeout", "interrupted"}
+    assert {s.value for s in TaskStatus} == {
+        "pending",
+        "running",
+        "done",
+        "failed",
+        "timeout",
+        "interrupted",
+        "unknown",
+    }

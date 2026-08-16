@@ -163,13 +163,41 @@ def transaction() -> Iterator[Session]:
 
 
 def select_for_update(session: "Session", *entities):
-    """Return a ``SELECT ... FOR UPDATE`` statement [FR-05].
+    """Return a ``SELECT ... FOR UPDATE`` statement [FR-05 / R12].
 
     Used by the rate-limit repository so the row lock is held inside the
-    same transaction that decrements the bucket.
+    same transaction that decrements the bucket. On SQLite the clause is
+    a no-op (closes P1-3 in the bug report) — that gap is made loud by
+    raising here so dev paths do not silently rely on a contract SQLite
+    cannot satisfy. Use :func:`select_for_update_or_pass` for the dev path
+    where SQLite is acceptable.
     """
     from sqlalchemy import select
+    dialect = session.bind.dialect.name if session.bind is not None else "sqlite"
+    if dialect == "sqlite":
+        raise RuntimeError(
+            "select_for_update is a no-op on SQLite; use Postgres for concurrency "
+            "tests or wrap the call site in a threading.Lock for in-process serialisation."
+        )
     return select(*entities).with_for_update()
+
+
+def select_for_update_or_pass(session: "Session", *entities):
+    """Return a ``SELECT ... FOR UPDATE`` on Postgres, plain ``SELECT`` elsewhere.
+
+    Pragmatic compromise for the dev path: callers that need to
+    serialise the row (e.g. ``run_task_endpoint`` locking the parent task
+    before enqueueing) can use this helper and the test path keeps
+    working on SQLite, while production still gets the row lock. The
+    cost is that the test path is *not* a faithful model of the
+    production race — that is the same caveat as the rest of the test
+    suite, and is closed by adding a Postgres-only CI lane.
+    """
+    from sqlalchemy import select
+    stmt = select(*entities)
+    if session.bind is not None and session.bind.dialect.name != "sqlite":
+        stmt = stmt.with_for_update()
+    return stmt
 
 
 # Self-reference for service-layer import ergonomics [NFR-06]. This module

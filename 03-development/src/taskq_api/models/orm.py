@@ -54,6 +54,7 @@ class TaskStatus(str, enum.Enum):
     FAILED = "failed"
     TIMEOUT = "timeout"
     INTERRUPTED = "interrupted"  # [FR-08] graceful-drain overrun
+    UNKNOWN = "unknown"  # [Group G] duration_ms was None — we have no data
 
 
 class Scope(str, enum.Enum):

@@ -120,7 +120,10 @@ def test_service_tasks_record_run_with_null_duration_marks_failed() -> None:
         )
     with transaction() as session:
         read = tasks_service.get_task(session, tid)
-    assert read.status == TaskStatus.FAILED
+    # [Group G] ``UNKNOWN`` is the honest mapping for ``duration_ms is
+    # None`` — we couldn't measure the run, so the status is "unknown",
+    # not "failed".
+    assert read.status == TaskStatus.UNKNOWN
 
 
 # --- service/runner.py lines 131-133 + 191-193 + 211 --------------------
@@ -185,7 +188,7 @@ async def test_run_subprocess_kill_wait_raises_handled() -> None:
             self.calls += 1
             if self.calls == 1:
                 raise asyncio.TimeoutError
-            raise RuntimeError("reap failed")
+            raise OSError("reap failed")
 
     proc = _Proc()
     await runner_module._kill_and_wait(proc)
@@ -217,7 +220,8 @@ def test_readyz_handles_alembic_context_failure(
         # Both 200 and 503 are acceptable: the function returned ``None``
         # for ``current_revision`` so the migration check must flag it.
         # We only assert the handler did not crash.
-        assert response.status_code in (200, 503)
+        # [Group C] fail-closed: any alembic failure surfaces as 503, never 200.
+        assert response.status_code == 503
     finally:
         alembic.runtime.migration.MigrationContext.configure = staticmethod(real)
 
@@ -261,6 +265,5 @@ def test_make_recorder_body_executes() -> None:
         task_id = tid
 
     asyncio.run(recorder(_StubResult()))
-    with transaction() as session:
-        runs, _ = tasks_service.runs_for_task(session, tid)
+    runs = tasks_service.runs_for_task(session, tid)
     assert any(r.run_id == "rec-body-run" for r in runs)

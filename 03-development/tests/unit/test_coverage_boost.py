@@ -102,7 +102,7 @@ async def test_run_subprocess_kill_returns_early_when_already_exited() -> None:
 async def test_run_subprocess_records_timeout_stdout_when_pipe_empty() -> None:
     """[FR-08] timeout path captures empty stdout/stderr rather than hanging."""
     cmd = f'"{sys.executable}" -c "import time; time.sleep(2)"'
-    result = await runner_module.run_subprocess(cmd, timeout=0.3)
+    result = await runner_module.run_subprocess(cmd, timeout=0.3, run_id="test-run-id", task_id="t-test")
     assert result.status.value == "timeout"
     assert result.exit_code is None
     assert result.duration_ms >= 200
@@ -136,7 +136,7 @@ async def test_background_runner_submit_returns_uuid_string() -> None:
 async def test_run_subprocess_subprocess_pipe_truncates() -> None:
     """[NFR-04 / FR-08] very long stdout is bounded to _MAX_TAIL_BYTES."""
     cmd = f'"{sys.executable}" -c "print(\'x\' * 10000)"'
-    result = await runner_module.run_subprocess(cmd, timeout=5.0)
+    result = await runner_module.run_subprocess(cmd, timeout=5.0, run_id="test-run-id", task_id="t-test")
     assert len(result.stdout_tail) <= runner_module._MAX_TAIL_BYTES
 
 
@@ -389,7 +389,8 @@ def test_readyz_handles_alembic_script_load_failure(
     try:
         with TestClient(create_app()) as client:
             response = client.get("/readyz")
-        assert response.status_code in (200, 503)
+        # [Group C] fail-closed: any alembic failure surfaces as 503, never 200.
+        assert response.status_code == 503
     finally:
         alembic.script.ScriptDirectory.from_config = staticmethod(real)
 
@@ -403,16 +404,20 @@ async def test_background_runner_dispatcher_swallows_validation_error() -> None:
     captured: list[str] = []
 
     async def _rec(result):
-        captured.append(result.run_id)
+        captured.append(result)
 
     runner = runner_module.BackgroundRunner(recorder=_rec, max_concurrent=1)
     await runner.start()
     # Empty command will trip ValidationFailedError inside run_subprocess.
+    # [Group B] the dispatch path now translates it into a synthetic
+    # FAILED record so every accepted run produces exactly one row.
     await runner.submit("t-bad", "")
     await asyncio.sleep(0.1)
     await runner.close()
-    # Recorder should not have been called.
-    assert captured == []
+    assert len(captured) == 1
+    assert captured[0].status.value == "failed"
+    assert captured[0].exit_code is None
+    assert "invalid command" in captured[0].stderr_tail
 
 
 # --- runner.py: generic exception inside dispatch ------------------------

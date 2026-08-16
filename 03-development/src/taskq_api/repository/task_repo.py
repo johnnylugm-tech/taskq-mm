@@ -8,7 +8,6 @@ request [FR-06]).
 from __future__ import annotations
 
 import base64
-import uuid
 from datetime import datetime
 from typing import List, Optional, Tuple
 
@@ -41,11 +40,19 @@ def _encode_cursor(created_at: datetime, task_id: str) -> str:
 
 
 def _decode_cursor(cursor: str) -> Tuple[datetime, str]:
+    """Decode a cursor produced by :func:`_encode_cursor`.
+
+    Narrow ``except`` so genuine bugs (TypeError, MemoryError, …)
+    surface to logs and 5xx handlers rather than being misclassified as
+    "invalid cursor" (closes P1-6).
+    """
+    import binascii
     try:
-        raw = base64.urlsafe_b64decode(cursor.encode()).decode()
-        ts, task_id = raw.split(_CURSOR_SEP, 1)
+        raw = base64.urlsafe_b64decode(cursor.encode())
+        text = raw.decode("utf-8")
+        ts, task_id = text.split(_CURSOR_SEP, 1)
         return datetime.fromisoformat(ts), task_id
-    except Exception as exc:
+    except (binascii.Error, UnicodeDecodeError, ValueError) as exc:
         raise TaskRepoError("invalid cursor") from exc
 
 
@@ -65,10 +72,13 @@ def create_task(
     if tags:
         task.tags = _upsert_tags(session, tags)
     session.add(task)
+    # [Group D] SAVEPOINT (session.begin_nested) so a duplicate-name flush
+    # rolls back only this insert; sibling writes in the same outer
+    # transaction (audit rows, batch endpoints) survive.
     try:
-        session.flush()
+        with session.begin_nested():
+            session.flush()
     except IntegrityError as exc:
-        session.rollback()
         raise DuplicateNameError(name) from exc
     return task
 
@@ -165,7 +175,7 @@ def record_run(
     session: Session,
     *,
     task_id: str,
-    run_id: Optional[str] = None,
+    run_id: str,
     exit_code: Optional[int],
     stdout_tail: Optional[str],
     stderr_tail: Optional[str],
@@ -173,10 +183,15 @@ def record_run(
     started_at: datetime,
     finished_at: datetime,
 ) -> TaskResult:
-    """Persist a :class:`TaskResult` row [FR-02 / v3 schema]."""
+    """Persist a :class:`TaskResult` row [FR-02 / v3 schema].
+
+    ``run_id`` is required — the runner generates the id before persisting
+    so the HTTP 202 body and the persisted row agree (Group A — closes
+    P0-1).
+    """
     result = TaskResult(
         task_id=task_id,
-        run_id=run_id or str(uuid.uuid4()),
+        run_id=run_id,
         exit_code=exit_code,
         stdout_tail=stdout_tail,
         stderr_tail=stderr_tail,

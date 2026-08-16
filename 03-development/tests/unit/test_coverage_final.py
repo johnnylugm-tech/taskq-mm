@@ -263,8 +263,8 @@ async def test_background_runner_start_is_idempotent() -> None:
 
 
 @pytest.mark.asyncio
-async def test_background_runner_dispatch_swallows_generic_subprocess_error() -> None:
-    """[FR-08] unexpected RuntimeError inside dispatch is logged, not raised."""
+async def test_background_runner_dispatch_swallows_subprocess_failure() -> None:
+    """[FR-08] OSError inside dispatch is translated to a synthetic FAILED record."""
     captured: list[object] = []
 
     async def _rec(result):
@@ -272,12 +272,15 @@ async def test_background_runner_dispatch_swallows_generic_subprocess_error() ->
 
     runner = runner_module.BackgroundRunner(recorder=_rec, max_concurrent=1)
     await runner.start()
-    # Submit a command that the OS will accept but Python's subprocess
-    # layer rejects — invokes the generic-exception branch in dispatch.
+    # Submit a command whose binary is missing — asyncio.create_subprocess_exec
+    # raises FileNotFoundError (a subclass of OSError) before the proc is
+    # spawned. The dispatcher translates this to a synthetic FAILED record.
     await runner.submit("bad", "/this/binary/does/not/exist/at/all")
     await asyncio.sleep(0.5)
     await runner.close()
-    assert captured == []
+    assert len(captured) == 1
+    assert captured[0].status.value == "failed"
+    assert captured[0].exit_code is None
 
 
 @pytest.mark.asyncio
@@ -388,7 +391,8 @@ def test_readyz_handles_no_versions_script(
             response = client.get("/readyz")
         # Either 200 (head=None treated as 'no alembic') or 503 with a
         # migration-not-ready body — both honour the contract.
-        assert response.status_code in (200, 503)
+        # [Group C] fail-closed: any alembic failure surfaces as 503, never 200.
+        assert response.status_code == 503
     finally:
         alembic.script.ScriptDirectory = real
 

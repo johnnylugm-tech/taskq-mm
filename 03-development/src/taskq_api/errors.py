@@ -16,7 +16,10 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, Optional
+from uuid import UUID
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -53,7 +56,11 @@ class Problem:
     extra: Optional[Dict[str, Any]] = None
 
     def to_body(self) -> Dict[str, Any]:
-        """Render the public body — never includes ``internal`` [NFR-02]."""
+        """Render the public body — never includes ``internal`` [NFR-02].
+
+        [Group E / P2-20] ``extra`` is namespaced under ``meta`` so
+        caller-supplied keys cannot clobber the official RFC 7807 fields.
+        """
         body: Dict[str, Any] = {
             "type": self.type,
             "title": self.title,
@@ -63,8 +70,21 @@ class Problem:
             "correlation_id": self.correlation_id,
         }
         if self.extra:
-            body.update(self.extra)
+            body["meta"] = {k: _coerce(v) for k, v in self.extra.items()}
         return body
+
+
+def _coerce(value: Any) -> Any:
+    """Coerce non-JSON-native values so ``JSONResponse`` never crashes."""
+    if isinstance(value, (str, int, float, bool, type(None))):
+        return value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, UUID):
+        return str(value)
+    return str(value)
 
 
 def new_correlation_id() -> str:
@@ -205,19 +225,22 @@ def install_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(APIError)
     async def _api_error_handler(request: Request, exc: APIError):
         problem = exc.to_problem(request)
-        # [FR-04 / R4] for 403 the instance URI must be the templated path —
-        # the actual resource id never makes it into the body.
-        if problem.status == 403:
-            problem = Problem(
-                type=problem.type,
-                title=problem.title,
-                status=problem.status,
-                detail=problem.detail,
-                instance=_templated_path(str(request.url.path)),
-                correlation_id=problem.correlation_id,
-                internal=problem.internal,
-                extra=problem.extra,
-            )
+        # [Group E / P1-16] every error body — not just 403 — uses the
+        # templated path. FastAPI stores the route definition on
+        # ``request.scope['route']`` (e.g. ``/v1/tasks/{task_id}``); when
+        # the route is unknown (404 from a missing path) we fall back to
+        # the legacy regex-based templating.
+        instance = _instance_path_for(request)
+        problem = Problem(
+            type=problem.type,
+            title=problem.title,
+            status=problem.status,
+            detail=problem.detail,
+            instance=instance,
+            correlation_id=problem.correlation_id,
+            internal=problem.internal,
+            extra=problem.extra,
+        )
         headers: Optional[Dict[str, str]] = None
         if isinstance(exc, RateLimitedError) and exc.extra and "retry_after" in exc.extra:
             headers = {"Retry-After": str(exc.extra["retry_after"])}
@@ -284,9 +307,31 @@ def install_exception_handlers(app: FastAPI) -> None:
 
 import re as _re
 
-_UUID_RE = _re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", _re.IGNORECASE)
+_UUID_RE = _re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    _re.IGNORECASE,
+)
+# Broader token-shaped id (ULID / KSUID / base62). Used as a fallback when
+# FastAPI has no route for the request (e.g. 404 on an unknown path).
+_TOKEN_RE = _re.compile(r"[A-Za-z0-9_-]{8,40}")
 
 
 def _templated_path(path: str) -> str:
-    """Replace UUID-ish segments with ``{id}`` so 403 bodies don't leak."""
+    """Replace UUID-shaped segments with ``{id}`` so 404/403 bodies don't
+    leak the resource id [FR-04 / R4]."""
     return _UUID_RE.sub("{id}", path)
+
+
+def _instance_path_for(request: Request) -> str:
+    """Pick the right ``instance`` value for an RFC 7807 body.
+
+    [Group E / P1-16 / P1-17] prefer the templated route from FastAPI
+    (``request.scope['route'].path``) so every id — UUID, ULID, KSUID,
+    base62 — is template-correct. Fall back to a regex-based
+    templating when no route matched (the path did not resolve to a
+    defined route at all).
+    """
+    route = request.scope.get("route")
+    if route is not None and getattr(route, "path", None):
+        return route.path
+    return _TOKEN_RE.sub("{id}", str(request.url.path))

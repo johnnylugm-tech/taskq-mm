@@ -128,7 +128,9 @@ def test_409_includes_extra_field(client: TestClient) -> None:
     response = client.get("/boom/409")
     assert response.status_code == 409
     body = response.json()
-    assert body.get("name") == "x"
+    # [Group E] extra is namespaced under ``meta`` so it cannot clobber the
+    # official RFC 7807 fields.
+    assert body.get("meta", {}).get("name") == "x"
 
 
 def test_422_returns_problem_json(client: TestClient) -> None:
@@ -196,3 +198,50 @@ def test_503_handled(client: TestClient) -> None:
     response = c.get("/not-ready")
     assert response.status_code == 503
     assert response.json()["type"] == "/errors/not-ready"
+
+# --- Group E coverage boosters ------------------------------------------
+
+
+def test_problem_body_coerces_decimal_and_uuid() -> None:
+    """[Group E / P2-21] non-JSON-native ``extra`` values are coerced."""
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    from uuid import uuid4
+    response = problem_response(
+        problem_type="/errors/internal",
+        title="t",
+        status=500,
+        detail="d",
+        request=_FakeRequest(),
+        extra={
+            "ratio": Decimal("0.75"),
+            "stamp": datetime(2026, 8, 16, tzinfo=timezone.utc),
+            "uid": uuid4(),
+            "raw": "kept",
+        },
+    )
+    import json as _json
+    body = _json.loads(response.body)
+    meta = body["meta"]
+    assert meta["ratio"] == 0.75
+    assert meta["raw"] == "kept"
+    # Stamp / uid are serialised as strings by _coerce; the test only
+    # asserts they're JSON-safe (no exception raised on serialise).
+    assert isinstance(meta["stamp"], str)
+    assert isinstance(meta["uid"], str)
+
+
+def test_instance_path_falls_back_to_token_regex_when_no_route() -> None:
+    """[Group E / P1-17] when the request has no ``route`` on scope
+    (a 404 from a missing path), the fallback regex still templates the
+    id-shaped segment.
+    """
+    from taskq_api.errors import _instance_path_for
+
+    class _NoRouteRequest:
+        url = type("U", (), {"path": "/v1/tasks/abcdef01-2345-6789-abcd-ef0123456789/runs"})()
+        scope: dict = {}
+
+    path = _instance_path_for(_NoRouteRequest())
+    assert "abcdef01-2345-6789-abcd-ef0123456789" not in path
+    assert "{id}" in path

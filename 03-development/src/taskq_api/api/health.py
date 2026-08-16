@@ -10,12 +10,20 @@ from sqlalchemy import text
 from ..config import get_settings
 from ..errors import NotReadyError
 from ..models.orm import Scope, TaskStatus
-from ..repository.session import transaction
+from ..repository.session import get_engine, transaction
 from ..service.auth import Principal, require_scope
-from ..service.tasks import runs_for_task
 from .deps import CurrentPrincipal
 
 router = APIRouter(tags=["health"])
+
+# Absolute path to the project root — ``api/health.py`` lives at
+# ``<root>/03-development/src/taskq_api/api/``; we walk up four levels to land
+# on the directory that owns ``alembic.ini``. This removes the CWD
+# dependency that previously made the readiness probe lie green when the
+# process was launched from any directory other than the repo root
+# (Group C — closes P0-3 + P1-14).
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), *([".."] * 4)))
+_ALEMBIC_INI = os.path.join(_REPO_ROOT, "alembic.ini")
 
 
 @router.get("/healthz", summary="Liveness probe", description="[FR-09] Always 200 when the process is alive.")
@@ -30,7 +38,11 @@ def healthz() -> dict[str, str]:
     description="[FR-09] 200 only when DB is reachable AND migration is at head; otherwise 503.",
 )
 def readyz(response: Response) -> dict[str, Any]:
-    """[FR-09] ``GET /readyz`` — fail closed on missing migration."""
+    """[FR-09] ``GET /readyz`` — fail closed on missing migration.
+
+    The comparison is fail-closed: any ``None`` from either alembic
+    helper is treated as a 503 cause (Group C — closes P0-3).
+    """
     detail: dict[str, Any] = {"db": "ok", "migration": "ok"}
     # DB ping
     try:
@@ -43,7 +55,11 @@ def readyz(response: Response) -> dict[str, Any]:
     # Migration at head
     head_revision = _read_alembic_head()
     current_revision = _read_alembic_current()
-    if current_revision != head_revision:
+    if (
+        head_revision is None
+        or current_revision is None
+        or current_revision != head_revision
+    ):
         detail["migration"] = (
             f"behind head: current={current_revision} head={head_revision}"
         )
@@ -53,30 +69,45 @@ def readyz(response: Response) -> dict[str, Any]:
 
 
 def _read_alembic_head() -> str | None:
-    """Return the latest revision filename (or ``None`` if no versions)."""
+    """Return the latest revision filename (or ``None`` if no versions).
+
+    Uses the absolute ``_ALEMBIC_INI`` path so the probe is independent of
+    the process working directory (Group C — closes P1-14).
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from alembic.util import CommandError
     try:
-        from alembic.script import ScriptDirectory
-        from alembic.config import Config
-        config = Config("alembic.ini")
+        config = Config(_ALEMBIC_INI)
         script = ScriptDirectory.from_config(config)
         return script.get_heads()[-1] if script.get_heads() else None
-    except Exception:
+    except (CommandError, FileNotFoundError, OSError):
+        return None
+    except Exception as exc:
+        from ..logging_setup import get_logger
+        get_logger("health").warning(
+            "alembic head read failed", extra={"reason": f"{type(exc).__name__}: {exc}"}
+        )
         return None
 
 
 def _read_alembic_current() -> str | None:
-    """Return the current revision in the DB (or ``None`` if unversioned)."""
-    db_url = get_settings().taskq_db_url
+    """Return the current revision in the DB (or ``None`` if unversioned).
+
+    Reuses the process-wide engine (Group C — closes P1-13: no per-probe
+    Engine creation, no connection pool leak).
+    """
+    from alembic.runtime.migration import MigrationContext
     try:
-        from alembic.runtime.migration import MigrationContext
-        from sqlalchemy import create_engine
-        engine = create_engine(db_url, future=True)
+        engine = get_engine()
         with engine.connect() as connection:
-            context = MigrationContext.configure(connection)
-            rev = context.get_current_revision()
-        engine.dispose()
-        return rev
-    except Exception:
+            ctx = MigrationContext.configure(connection)
+            return ctx.get_current_revision()
+    except Exception as exc:  # alembic probes — surface cause, do not crash
+        from ..logging_setup import get_logger
+        get_logger("health").warning(
+            "alembic current read failed", extra={"reason": f"{type(exc).__name__}: {exc}"}
+        )
         return None
 
 
@@ -98,10 +129,14 @@ def metrics(principal: CurrentPrincipal) -> dict[str, Any]:
                 select(Task.status, func.count(Task.id)).group_by(Task.status)
             ).all()
         )
+        # [Group G] bound the latency sample so a large history doesn't
+        # OOM the api process (10k rows is plenty for a sampled percentile).
         durations = [
             row.duration_ms
             for row in session.execute(
-                select(TaskResult.duration_ms).where(TaskResult.duration_ms.is_not(None))
+                select(TaskResult.duration_ms)
+                .where(TaskResult.duration_ms.is_not(None))
+                .limit(10_000)
             ).all()
             if row.duration_ms is not None
         ]

@@ -100,9 +100,13 @@ def test_consume_or_raise_rejects_over_burst() -> None:
 
 
 def test_consume_or_raise_unknown_key_raises() -> None:
+    """[Group D] an unknown key id is now :class:`UnauthenticatedError`,
+    not :class:`RateLimitedError` — a missing key is an auth decision.
+    """
+    from taskq_api.errors import UnauthenticatedError
     principal = Principal(key_id=99999, scope=Scope.READ)
     with transaction() as session:
-        with pytest.raises(RateLimitedError):
+        with pytest.raises(UnauthenticatedError):
             consume_or_raise(session, principal)
 
 
@@ -162,10 +166,12 @@ def test_list_tasks_returns_page() -> None:
     assert len(page.items) == 2
 
 
-def test_delete_task_unknown_raises_not_found() -> None:
-    with pytest.raises(NotFoundError):
-        with transaction() as session:
-            tasks_service.delete_task(session, "missing")
+def test_delete_task_unknown_is_silent() -> None:
+    """[Group D / P1-1] the service no longer raises on a missing id —
+    existence is hidden per FR-04. The api layer always returns 204.
+    """
+    with transaction() as session:
+        tasks_service.delete_task(session, "non-existent-id")  # must not raise
 
 
 def test_record_run_updates_status() -> None:
@@ -226,6 +232,9 @@ def test_runs_for_task_unknown_raises() -> None:
 
 
 def test_runs_for_task_returns_history() -> None:
+    """[Group G / P2-4] the dead second tuple element is gone —
+    returns a plain list, not a (rows, found) tuple.
+    """
     from datetime import datetime, timezone
     with transaction() as session:
         tasks_service.create_task(session, TaskCreate(command="echo", name="hist"))
@@ -246,6 +255,5 @@ def test_runs_for_task_returns_history() -> None:
                 started_at=now,
                 finished_at=now,
             )
-    with transaction() as session:
-        runs, _ = tasks_service.runs_for_task(session, tid)
+    runs = tasks_service.runs_for_task(session, tid)
     assert len(runs) == 2

@@ -347,6 +347,91 @@ async def test_run_endpoint_returns_202_and_persists_history(
     assert len(runs.json()["items"]) >= 1
 
 
+@pytest.mark.asyncio
+async def test_run_id_in_response_matches_db(
+    client: httpx.AsyncClient, seeded_keys: dict[str, str]
+) -> None:
+    """[Group A] the ``run_id`` in the 202 body must be the same UUID that
+    lands in ``task_results.run_id`` (closes P0-1).
+    """
+    import asyncio
+    write = _hdr(seeded_keys["write"])
+    read = _hdr(seeded_keys["read"])
+    created = await client.post(
+        "/v1/tasks", json={"command": "echo id", "name": "id-roundtrip"}, headers=write
+    )
+    task_id = created.json()["id"]
+    response = await client.post(f"/v1/tasks/{task_id}/run", headers=write)
+    assert response.status_code == 202
+    returned_run_id = response.json()["run_id"]
+    # Wait for the worker to persist the row.
+    for _ in range(40):
+        runs = await client.get(f"/v1/tasks/{task_id}/runs", headers=read)
+        if runs.json()["items"]:
+            break
+        await asyncio.sleep(0.1)
+    runs = await client.get(f"/v1/tasks/{task_id}/runs", headers=read)
+    items = runs.json()["items"]
+    assert any(r["run_id"] == returned_run_id for r in items)
+
+
+@pytest.mark.asyncio
+async def test_404_body_uses_templated_path_not_raw_id(
+    client: httpx.AsyncClient, seeded_keys: dict[str, str]
+) -> None:
+    """[Group E / P1-16] a 404 body must not echo the raw resource id.
+    The ``instance`` field is the templated route (``/v1/tasks/{task_id}``).
+    """
+    read = _hdr(seeded_keys["read"])
+    fake = "00000000-0000-0000-0000-000000000000"
+    response = await client.get(f"/v1/tasks/{fake}", headers=read)
+    assert response.status_code == 404
+    body = response.json()
+    assert "instance" in body
+    assert fake not in body["instance"]
+    assert "{task_id}" in body["instance"] or body["instance"].endswith("/{task_id}")
+
+
+@pytest.mark.asyncio
+async def test_delete_unknown_id_returns_204(
+    client: httpx.AsyncClient, seeded_keys: dict[str, str]
+) -> None:
+    """[Group D / P1-1] DELETE on a missing id returns 204 silently —
+    FR-04 forbids the 404 leak.
+    """
+    admin = _hdr(seeded_keys["admin"])
+    fake = "00000000-0000-0000-0000-000000000000"
+    response = await client.delete(f"/v1/tasks/{fake}", headers=admin)
+    assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_readyz_returns_503_when_alembic_version_table_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """[Group C] ``/readyz`` returns 503 — never 200 — when the migration
+    table is absent (fresh DB, never run ``alembic upgrade head``).
+    """
+    monkeypatch.setenv("TASKQ_DB_URL", f"sqlite:///{tmp_path / 'no_alembic.db'}")
+    from taskq_api.config import reset_settings_cache
+    reset_settings_cache()
+    import taskq_api.repository.session as session_repo
+    session_repo.reset_engine()
+    # Create the table Base but DO NOT stamp alembic_version.
+    session_repo.create_all()
+    from fastapi.testclient import TestClient
+    from taskq_api.app import create_app
+    # Drop the alembic_version table that create_all just made.
+    from sqlalchemy import text
+    with session_repo.get_engine().connect() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+        conn.commit()
+    with TestClient(create_app()) as client:
+        response = client.get("/readyz")
+    assert response.status_code == 503
+    assert "migration" in response.json()
+
+
 # --- readyz fail-closed ----------------------------------------------------
 
 

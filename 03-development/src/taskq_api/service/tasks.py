@@ -98,18 +98,19 @@ def list_tasks(
 
 
 def delete_task(session: Session, task_id: str) -> None:
-    """[FR-01] — hard delete. Unknown id is silently ignored here so the
-    api layer can decide whether to leak the existence [FR-04]."""
-    removed = task_repo.delete_task(session, task_id)
-    if not removed:
-        raise TaskNotFoundError()
+    """[FR-01] — hard delete. The contract is "delete if present, otherwise
+    nothing happened" (closes P1-1 / FR-04). The api layer is the right
+    place to decide between 204 and 404, but the SPEC's no-leak rule
+    forbids the 404 — so this function is silent on missing id.
+    """
+    task_repo.delete_task(session, task_id)  # returns bool; we ignore it
 
 
 def record_run_for_task(
     session: Session,
     *,
     task_id: str,
-    run_id: Optional[str],
+    run_id: str,
     exit_code: Optional[int],
     stdout_tail: Optional[str],
     stderr_tail: Optional[str],
@@ -119,9 +120,14 @@ def record_run_for_task(
 ) -> TaskResultRead:
     """[FR-02] — record a run and update the parent task status.
 
-    Returns the persisted run row in the pydantic shape.
+    The parent :class:`Task` is fetched with a row lock (Group D /
+    P1-2) so two concurrent runs of the same task serialise on
+    ``tasks.status`` and the last writer wins deterministically.
     """
-    task = task_repo.find_task_by_id(session, task_id)
+    from ..repository.session import select_for_update_or_pass
+    task = session.execute(
+        select_for_update_or_pass(session, Task).where(Task.id == task_id)
+    ).scalar_one_or_none()
     if task is None:
         raise TaskNotFoundError()
     new_status = _derive_status(exit_code, duration_ms)
@@ -150,33 +156,42 @@ def record_run_for_task(
 
 
 def _derive_status(exit_code: Optional[int], duration_ms: Optional[int]) -> TaskStatus:
-    """Map an exit-code / duration pair to the final task status [FR-02]."""
+    """Map an exit-code / duration pair to the final task status [FR-02].
+
+    ``duration_ms is None`` means the run never recorded a duration
+    (e.g. the recorder crashed). With the ``UNKNOWN`` enum value added
+    in v4 (Group G) the honest answer is ``UNKNOWN``, not ``FAILED``.
+    """
     if duration_ms is None:
-        return TaskStatus.FAILED
+        # [Group G] UNKNOWN — collapses "could not measure" with "ran and
+        # failed" no longer.
+        return TaskStatus.UNKNOWN
     if exit_code is None:
         return TaskStatus.TIMEOUT
     return TaskStatus.DONE if exit_code == 0 else TaskStatus.FAILED
 
 
-def runs_for_task(session: Session, task_id: str) -> Tuple[List[TaskResultRead], bool]:
-    """[FR-02] — list runs for a task; second element is ``found`` flag."""
+def runs_for_task(session: Session, task_id: str) -> List[TaskResultRead]:
+    """[FR-02] — list runs for a task, newest first.
+
+    The dead second tuple element has been removed (Group G / P2-4) —
+    the missing-task path is signalled by :class:`TaskNotFoundError`,
+    never by a boolean.
+    """
     task = task_repo.find_task_by_id(session, task_id)
     if task is None:
         raise TaskNotFoundError()
     rows = task_repo.runs_for_task(session, task_id)
-    return (
-        [
-            TaskResultRead(
-                id=r.id,
-                run_id=r.run_id,
-                exit_code=r.exit_code,
-                stdout_tail=r.stdout_tail,
-                stderr_tail=r.stderr_tail,
-                duration_ms=r.duration_ms,
-                started_at=r.started_at,
-                finished_at=r.finished_at,
-            )
-            for r in rows
-        ],
-        True,
-    )
+    return [
+        TaskResultRead(
+            id=r.id,
+            run_id=r.run_id,
+            exit_code=r.exit_code,
+            stdout_tail=r.stdout_tail,
+            stderr_tail=r.stderr_tail,
+            duration_ms=r.duration_ms,
+            started_at=r.started_at,
+            finished_at=r.finished_at,
+        )
+        for r in rows
+    ]

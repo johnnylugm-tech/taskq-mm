@@ -51,17 +51,27 @@ def fetch_active_api_key(session: Session, plaintext: str) -> Optional[APIKey]:
 
     Returns ``None`` for any unknown or revoked key. ``hmac.compare_digest``
     keeps the comparison timing-safe [FR-03 / NFR-02].
+
+    The lookup uses the unique index on ``key_hash`` (closes P1-2: a
+    full scan of the active-key set both leaks position via the early
+    return and defeats the unique index). The ``hmac.compare_digest``
+    is evaluated even on the single-row path so the response time does
+    not depend on whether the row exists.
     """
     if not plaintext:
         return None
     target = _hash_key(plaintext)
-    candidates: Iterable[APIKey] = session.execute(
-        select(APIKey).where(APIKey.revoked_at.is_(None))
-    ).scalars()
-    for candidate in candidates:
-        if hmac.compare_digest(candidate.key_hash, target):
-            return candidate
-    return None
+    row = session.execute(
+        select(APIKey).where(APIKey.key_hash == target, APIKey.revoked_at.is_(None))
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    if not hmac.compare_digest(row.key_hash, target):
+        # Defensive branch: row exists but the hash mismatches. The
+        # ``SELECT`` is by ``key_hash`` so this should be unreachable,
+        # but the compare keeps the audit log honest.
+        return None
+    return row
 
 
 def list_api_keys(session: Session) -> List[APIKey]:
@@ -70,12 +80,20 @@ def list_api_keys(session: Session) -> List[APIKey]:
 
 
 def revoke_api_key(session: Session, key_id: int) -> Optional[APIKey]:
-    """Mark a key as revoked [FR-03]. Returns ``None`` if the id is unknown."""
+    """Mark a key as revoked [FR-03]. Returns ``None`` if the id is unknown.
+
+    Also resets the associated :class:`RateBucket` to ``tokens = 0`` so
+    post-revocation requests fail-fast at the rate-limit layer
+    (closes P1-10: a revoked key with remaining tokens would
+    otherwise continue to drain until the bucket is empty).
+    """
+    from .rate_repo import _reset_bucket_for_key
     row = session.get(APIKey, key_id)
     if row is None:
         return None
     row.revoked_at = datetime.now(tz=timezone.utc)
     session.add(row)
+    _reset_bucket_for_key(session, key_id, tokens=0)
     session.flush()
     return row
 

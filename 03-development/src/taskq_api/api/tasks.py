@@ -11,8 +11,9 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
 
-from ..errors import NotReadyError
-from ..models.orm import Scope, TaskStatus
+from ..errors import NotFoundError, NotReadyError
+from ..service.tasks import TaskNotFoundError as _TaskNotFoundError
+from ..models.orm import Scope, TaskStatus, Task as _Task
 from ..models.schemas import (
     CursorPage,
     TaskCreate,
@@ -20,7 +21,7 @@ from ..models.schemas import (
     TaskResultRead,
     TaskRunRead,
 )
-from ..repository.session import transaction
+from ..repository.session import select_for_update_or_pass, transaction
 from ..service.auth import Principal, require_scope
 from ..service.runner import BackgroundRunner
 from ..service import tasks as tasks_service
@@ -109,12 +110,24 @@ async def run_task_endpoint(
     task_id: Annotated[str, Path(min_length=1)],
     principal: CurrentPrincipal,
 ) -> TaskRunRead:
-    """[FR-02] POST /v1/tasks/{id}/run — 202 Accepted with run_id."""
+    """[FR-02] POST /v1/tasks/{id}/run — 202 Accepted with run_id.
+
+    [Group F / P1-18] the row lock is held across the ``runner.submit``
+    call so a concurrent ``DELETE /v1/tasks/{id}`` either runs before
+    (we see the task) or after (the runner has already enqueued) the
+    lock is released — never interleaved. The ``runner.submit`` returns
+    a ``run_id`` that the same transaction commits; the API caller
+    polls the persisted row by that id.
+    """
     require_scope(principal, Scope.WRITE)
-    with transaction() as session:
-        task = tasks_service.get_task(session, task_id)
     runner: BackgroundRunner = _runner_from_state()
-    run_id = await runner.submit(task.id, task.command)
+    with transaction() as session:
+        task = session.execute(
+            select_for_update_or_pass(session, _Task).where(_Task.id == task_id)
+        ).scalar_one_or_none()
+        if task is None:
+            raise _TaskNotFoundError(detail="Unknown task id.")
+        run_id = await runner.submit(task.id, task.command)
     return TaskRunRead(task_id=task.id, run_id=run_id, status=task.status)
 
 
@@ -131,8 +144,8 @@ def list_runs_endpoint(
     """[FR-02] GET /v1/tasks/{id}/runs."""
     require_scope(principal, Scope.READ)
     with transaction() as session:
-        rows, _ = tasks_service.runs_for_task(session, task_id)
-    return CursorPage[TaskResultRead](items=rows, next_cursor=None)
+        runs = tasks_service.runs_for_task(session, task_id)
+    return CursorPage[TaskResultRead](items=runs, next_cursor=None)
 
 
 def _runner_from_state() -> BackgroundRunner:

@@ -21,7 +21,7 @@ from taskq_api.service.runner import (
 @pytest.mark.asyncio
 async def test_run_subprocess_echo_succeeds() -> None:
     cmd = f'"{sys.executable}" -c "print(123)"'
-    result = await run_subprocess(cmd, timeout=5.0)
+    result = await run_subprocess(cmd, timeout=5.0, run_id="test-run-id", task_id="t-test")
     assert isinstance(result, ExecutionResult)
     assert result.exit_code == 0
     assert "123" in result.stdout_tail
@@ -31,7 +31,7 @@ async def test_run_subprocess_echo_succeeds() -> None:
 @pytest.mark.asyncio
 async def test_run_subprocess_nonzero_exit_marks_failed() -> None:
     cmd = f'"{sys.executable}" -c "import sys; sys.exit(2)"'
-    result = await run_subprocess(cmd, timeout=5.0)
+    result = await run_subprocess(cmd, timeout=5.0, run_id="test-run-id", task_id="t-test")
     assert result.exit_code == 2
     assert result.status == TaskStatus.FAILED
 
@@ -39,20 +39,20 @@ async def test_run_subprocess_nonzero_exit_marks_failed() -> None:
 @pytest.mark.asyncio
 async def test_run_subprocess_empty_command_rejected() -> None:
     with pytest.raises(ValidationFailedError):
-        await run_subprocess("", timeout=1.0)
+        await run_subprocess("", timeout=1.0, run_id="test-run-id", task_id="t-test")
 
 
 @pytest.mark.asyncio
 async def test_run_subprocess_whitespace_command_rejected() -> None:
     with pytest.raises(ValidationFailedError):
-        await run_subprocess("   ", timeout=1.0)
+        await run_subprocess("   ", timeout=1.0, run_id="test-run-id", task_id="t-test")
 
 
 @pytest.mark.asyncio
 async def test_run_subprocess_timeout_kills_child() -> None:
     """[FR-08 / R8] timeout must terminate the child — no orphan."""
     cmd = f'"{sys.executable}" -c "import time; time.sleep(10)"'
-    result = await run_subprocess(cmd, timeout=0.5)
+    result = await run_subprocess(cmd, timeout=0.5, run_id="test-run-id", task_id="t-test")
     assert result.status == TaskStatus.TIMEOUT
     assert result.exit_code is None
 
@@ -61,7 +61,7 @@ async def test_run_subprocess_timeout_kills_child() -> None:
 async def test_run_subprocess_redacts_secrets_in_stdout() -> None:
     """[NFR-04] secrets captured in stdout must be redacted before storage."""
     cmd = f'"{sys.executable}" -c "print(\'token=abcdefghijklmnop\')"'
-    result = await run_subprocess(cmd, timeout=2.0)
+    result = await run_subprocess(cmd, timeout=2.0, run_id="test-run-id", task_id="t-test")
     assert "abcdefghijklmnop" not in result.stdout_tail
     assert "[REDACTED]" in result.stdout_tail
 
@@ -69,7 +69,7 @@ async def test_run_subprocess_redacts_secrets_in_stdout() -> None:
 @pytest.mark.asyncio
 async def test_run_subprocess_redacts_secrets_in_stderr() -> None:
     cmd = f'"{sys.executable}" -c "import sys; sys.stderr.write(\'Bearer xyz987654321\\n\')"'
-    result = await run_subprocess(cmd, timeout=2.0)
+    result = await run_subprocess(cmd, timeout=2.0, run_id="test-run-id", task_id="t-test")
     assert "xyz987654321" not in result.stderr_tail
 
 
@@ -173,5 +173,5 @@ async def test_background_runner_records_in_db() -> None:
     await runner.submit(tid, f'"{sys.executable}" -c "print(99)"')
     await runner.close()
     with transaction() as session:
-        runs, _ = tasks_service.runs_for_task(session, tid)
+        runs = tasks_service.runs_for_task(session, tid)
     assert any(r.exit_code == 0 for r in runs)

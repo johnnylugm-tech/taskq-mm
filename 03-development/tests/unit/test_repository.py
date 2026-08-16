@@ -11,7 +11,13 @@ from taskq_api.repository.key_repo import key_repo
 from taskq_api.repository.rate_repo import rate_repo
 from taskq_api.repository.task_repo import task_repo
 from taskq_api.repository.session import transaction
-from taskq_api.repository.session import get_engine, get_sessionmaker, select_for_update, transaction as tx
+from taskq_api.repository.session import (
+    get_engine,
+    get_sessionmaker,
+    select_for_update,
+    select_for_update_or_pass,
+    transaction as tx,
+)
 
 
 def test_create_task_persists() -> None:
@@ -256,9 +262,25 @@ def test_take_token_refills_over_time() -> None:
     assert allowed is True
 
 
-def test_select_for_update_returns_a_query() -> None:
+def test_select_for_update_raises_on_sqlite() -> None:
+    """[Group D] on SQLite the contract is loud: the no-op is raised so
+    callers cannot silently rely on a lock SQLite cannot provide.
+    """
     from taskq_api.models.orm import RateBucket as _RB
     with tx() as session:
-        stmt = select_for_update(session, _RB)
-        # Just exercising the code path; not running the query in this test.
+        with pytest.raises(RuntimeError, match="no-op on SQLite"):
+            select_for_update(session, _RB)
+
+
+def test_select_for_update_or_pass_returns_statement_on_sqlite() -> None:
+    """[Group D] the dev-path compromise returns a plain SELECT on SQLite."""
+    from taskq_api.models.orm import RateBucket as _RB
+    from sqlalchemy import select
+    with tx() as session:
+        stmt = select_for_update_or_pass(session, _RB)
         assert stmt is not None
+        # The statement is a plain ``select`` (no ``with_for_update``) on
+        # SQLite; on Postgres the helper would have called
+        # ``.with_for_update()``.
+        compiled = str(stmt.compile(dialect=session.bind.dialect))
+        assert "for update" not in compiled.lower()
